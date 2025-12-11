@@ -1,129 +1,175 @@
 import streamlit as st
-import sympy as sp
 import numpy as np
+import sympy as sp
 import plotly.graph_objects as go
-from sympy.parsing.sympy_parser import parse_expr
-import random
+import plotly.io as pio
+import math
+from sympy.parsing.sympy_parser import (
+    parse_expr, standard_transformations, implicit_multiplication_application, convert_xor
+)
 
+# ---------------------------
+# Configuración de página
+# ---------------------------
+st.set_page_config(page_title="Cálculo Visual con Python", layout="wide", page_icon="📘")
+st.markdown("<h1 style='text-align:center;'>📘 Cálculo Visual con Python — Simulador Interactivo de Cálculo</h1>", unsafe_allow_html=True)
+
+# ---------------------------
+# Helpers
+# ---------------------------
+TRANS = standard_transformations + (implicit_multiplication_application, convert_xor)
+X = sp.Symbol("x")
 
 def limpiar(expr):
-    return (
-        expr.replace("^", "**")
-            .replace("sen", "sin")
-            .replace("π", "pi")
-    )
+    return expr.replace("^", "**").replace("sen", "sin").replace("π", "pi").strip()
 
-x = sp.Symbol("x")
+def safe_lamb(sym_expr):
+    try:
+        f = sp.lambdify(X, sym_expr, modules=["numpy"])
+    except:
+        return None
+
+    def env(arr):
+        try:
+            y = f(arr)
+            y = np.array(y, dtype=float)
+            y[~np.isfinite(y)] = np.nan
+            return y
+        except:
+            out = []
+            for xi in np.atleast_1d(arr):
+                try:
+                    out.append(float(f(xi)))
+                except:
+                    out.append(np.nan)
+            return np.array(out, dtype=float)
+
+    return env
+
+def puntos_criticos(expr, xmin, xmax):
+    crit = []
+    try:
+        d = sp.diff(expr, X)
+        sol = sp.solve(sp.Eq(d, 0), X)
+        for s in sol:
+            try:
+                v = float(s.evalf())
+                if xmin <= v <= xmax:
+                    crit.append(v)
+            except:
+                pass
+    except:
+        pass
+    return sorted(set(crit))
+
+def clasificar(expr, x0):
+    try:
+        d2 = sp.diff(expr, X, 2)
+        val = float(d2.subs(X, x0))
+        if val > 0: return "mínimo local"
+        if val < 0: return "máximo local"
+        return "inconcluso"
+    except:
+        return "inconcluso"
 
 # ---------------------------
-# Título
+# Sidebar
 # ---------------------------
-st.title("Cálculo Visual con Python")
+with st.sidebar:
+    st.header("⚙️ Configuración")
+    raw = limpiar(st.text_input("Ingresa f(x):", "sin(x) + x**2"))
+    xmin = st.number_input("x mínimo", value=-6.0)
+    xmax = st.number_input("x máximo", value=6.0)
+    resolution = st.slider("Resolución", 200, 3000, 1200)
+
+    st.markdown("---")
+    st.subheader("Capas")
+    show_f = st.checkbox("Mostrar f(x)", True)
+    show_d = st.checkbox("Mostrar f'(x)", True)
+    show_p = st.checkbox("Mostrar F(x) (primitiva)", False)
+    show_area = st.checkbox("Mostrar área", False)
+
+    st.markdown("---")
+    st.subheader("Punto")
+    x0 = st.slider("x₀", xmin, xmax, float((xmin + xmax)/4))
 
 # ---------------------------
-# Entrada de función
+# Parsing simbólico
 # ---------------------------
-entrada = st.text_input("Ingresa f(x):", "sin(x) + x**2")
-expr = limpiar(entrada)
+try:
+    f_sym = parse_expr(raw, transformations=TRANS, evaluate=True)
+except Exception as e:
+    st.error("La función es inválida.")
+    st.stop()
 
-xmin = st.slider("x mínimo", -10, 0, -5)
-xmax = st.slider("x máximo", 0, 10, 5)
+# Derivada e integral
+try:
+    d_sym = sp.diff(f_sym, X)
+except:
+    d_sym = None
 
 try:
-    # ---------------------------
-    # Crear función simbólica
-    # ---------------------------
-    f = parse_expr(expr)
-    st.latex("f(x)=" + sp.latex(f))
+    p_sym = sp.integrate(f_sym, X)
+except:
+    p_sym = None
 
-    f_lamb = sp.lambdify(x, f, "numpy")
+# lambdas
+f = safe_lamb(f_sym)
+df = safe_lamb(d_sym) if d_sym is not None else None
+Fp = safe_lamb(p_sym) if p_sym is not None else None
 
-    # Derivada
-    der = sp.diff(f, x)
-    st.latex("f'(x)=" + sp.latex(der))
-    der_lamb = sp.lambdify(x, der, "numpy")
+# Dominio
+xs = np.linspace(xmin, xmax, resolution)
+ys = f(xs)
 
-    # Integral
-    F = sp.integrate(f, x)
-    st.latex("F(x)=" + sp.latex(F))
-    F_lamb = sp.lambdify(x, F, "numpy")
+# Puntos críticos
+crit = puntos_criticos(f_sym, xmin, xmax)
+crit_info = []
+for c in crit:
+    try:
+        yc = float(f_sym.subs(X, c))
+    except:
+        yc = None
+    crit_info.append((c, yc, clasificar(f_sym, c)))
 
-    # ---------------------------
-    # Rango
-    # ---------------------------
-    xs = np.linspace(xmin, xmax, 600)
-    ys = f_lamb(xs)
-    ys_der = der_lamb(xs)
-    ys_F = F_lamb(xs)
+# ---------------------------
+# Evaluación en x0
+# ---------------------------
+try:
+    y0 = float(f_sym.subs(X, x0))
+except:
+    y0 = float(f(np.array([x0]))[0])
 
-    # ---------------------------
-    # Figura
-    # ---------------------------
-    fig = go.Figure()
+try:
+    slope = float(d_sym.subs(X, x0))
+except:
+    slope = float(df(np.array([x0]))[0]) if df else float("nan")
 
-    # f(x)
-    fig.add_trace(go.Scatter(
-        x=xs, y=ys, name="f(x)", line=dict(width=3)
-    ))
+# ---------------------------
+# Figura
+# ---------------------------
+fig = go.Figure()
 
-    # f'(x)
-    fig.add_trace(go.Scatter(
-        x=xs, y=ys_der, name="f'(x)",
-        line=dict(color="red", dash="dash")
-    ))
+# f(x)
+if show_f:
+    fig.add_trace(go.Scatter(x=xs, y=ys, name="f(x)", line=dict(width=3)))
 
-    # F(x)
-    fig.add_trace(go.Scatter(
-        x=xs, y=ys_F, name="F(x)",
-        line=dict(color="green", dash="dot")
-    ))
+# f'(x)
+if show_d and df is not None:
+    fig.add_trace(go.Scatter(x=xs, y=df(xs), name="f'(x)", line=dict(color="red", dash="dash")))
 
-    # ---------------------------
-    # Punto móvil
-    # ---------------------------
-    if "x0" not in st.session_state:
-        st.session_state.x0 = 0.0
+# F(x)
+if show_p:
+    if p_sym is not None:
+        fig.add_trace(go.Scatter(x=xs, y=Fp(xs), name="F(x)", line=dict(color="green", dash="dot")))
+    else:
+        fig.add_trace(go.Scatter(x=xs, y=np.cumsum(ys), name="F(x)≈"))
 
-    st.subheader("Control del punto")
-
-    x0 = st.slider(
-        "Posición del punto:",
-        float(xmin), float(xmax), st.session_state.x0
-    )
-
-    st.session_state.x0 = x0
-
-    y0 = float(f_lamb(x0))
-    dy0 = float(der_lamb(x0))
-
-    # punto
-    fig.add_trace(go.Scatter(
-        x=[x0], y=[y0], mode="markers+text",
-        name="Punto",
-        marker=dict(size=10, color="orange"),
-        text=["x0"],
-        textposition="top center"
-    ))
-
-    # ---------------------------
-    # Tangente
-    # ---------------------------
-    xt = np.linspace(x0 - 2, x0 + 2, 200)
-    yt = dy0 * (xt - x0) + y0
-
-    fig.add_trace(go.Scatter(
-        x=xt, y=yt, name="Tangente",
-        line=dict(color="orange")
-    ))
-
-    # ---------------------------
-    # Área bajo la curva
-    # ---------------------------
-    st.subheader("Área bajo la curva")
-
-    a = st.number_input("Límite a", value=-1.0)
-    b = st.number_input("Límite b", value=1.0)
-
+# Área
+if show_area:
+    with st.sidebar:
+        a = st.number_input("a", value=-2.0)
+        b = st.number_input("b", value=2.0)
     if a < b:
         mask = (xs >= a) & (xs <= b)
         fig.add_trace(go.Scatter(
@@ -133,39 +179,58 @@ try:
             fillcolor="rgba(0,255,0,0.2)",
             name="Área"
         ))
+        try:
+            area = float(sp.integrate(f_sym, (X, a, b)))
+        except:
+            area = float(np.trapz(ys[mask], xs[mask]))
+        st.success(f"Área = {area}")
 
-        area_val = float(sp.integrate(f, (x, a, b)))
-        st.success(f"Área entre {a} y {b}: {area_val:.4f}")
+# Punto
+fig.add_trace(go.Scatter(
+    x=[x0], y=[y0], mode="markers",
+    marker=dict(size=10, color="orange"),
+    name="x₀"
+))
 
-    # ---------------------------
-    # Mostrar gráfica
-    # ---------------------------
-    fig.update_layout(
-        template="plotly_white",
-        height=600
-    )
-    st.plotly_chart(fig, use_container_width=True)
+# Tangente
+xt = np.linspace(x0 - (xmax - xmin) * 0.15, x0 + (xmax - xmin) * 0.15, 200)
+yt = slope * (xt - x0) + y0
+fig.add_trace(go.Scatter(
+    x=xt, y=yt, name="Tangente",
+    line=dict(color="orange", dash="dot")
+))
 
-    # ---------------------------
-    # Animación del punto
-    # ---------------------------
-    st.subheader("Animación del punto")
+# Puntos críticos
+for c, yc, tipo in crit_info:
+    fig.add_trace(go.Scatter(
+        x=[c], y=[yc],
+        mode="markers+text",
+        marker=dict(size=10, color="#8e44ad"),
+        text=[tipo],
+        textposition="top center",
+        name=f"Crítico {tipo}"
+    ))
 
-    if "anim" not in st.session_state:
-        st.session_state.anim = False
+fig.update_layout(
+    height=650,
+    template="plotly_white",
+    legend=dict(orientation="h", y=1.05)
+)
 
-    if st.button("Iniciar animación"):
-        st.session_state.anim = True
+# Mostrar gráfica
+st.plotly_chart(fig, use_container_width=True)
 
-    if st.button("Detener animación"):
-        st.session_state.anim = False
+# Simbología
+with st.expander("Expresiones simbólicas"):
+    st.latex("f(x)=" + sp.latex(f_sym))
+    if d_sym is not None:
+        st.latex("f'(x)=" + sp.latex(d_sym))
+    if p_sym is not None:
+        st.latex("F(x)=" + sp.latex(p_sym))
 
-    if st.session_state.anim:
-        st.session_state.x0 += 0.1
-        if st.session_state.x0 > xmax:
-            st.session_state.x0 = xmin
-        st.experimental_rerun()
-
-except Exception as e:
-    st.error("La función no es válida.")
-    st.exception(e)
+# Exportar PNG
+try:
+    img = pio.to_image(fig, format="png")
+    st.download_button("Descargar gráfica en PNG", img, "grafica.png", "image/png")
+except:
+    st.info("Instala 'kaleido' para exportar imágenes.")
