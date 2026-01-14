@@ -110,6 +110,9 @@ with st.sidebar:
         help="Ejemplos: x^2, sin(x), 2(x+1), ln(x), sqrt(x)"
     )
 
+    xmin = st.number_input("x mínimo", -20.0, 0.0, -6.0)
+    xmax = st.number_input("x máximo", 0.0, 20.0, 6.0)
+
     st.markdown("---")
     show_f = st.checkbox("Mostrar f(x)", True)
     show_d = st.checkbox("Mostrar derivada", True)
@@ -119,6 +122,7 @@ with st.sidebar:
     st.markdown("---")
     x0 = st.slider("Punto x₀", xmin, xmax, (xmin + xmax) / 4)
 
+resolution = 1200
 # =============================
 # PROCESAMIENTO
 # =============================
