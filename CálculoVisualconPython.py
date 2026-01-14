@@ -19,8 +19,8 @@ st.set_page_config(
 )
 
 st.markdown(
-    "<h1 style='text-align:center;'>📘 Cálculo Visual con Python</h1>"
-    "<p style='text-align:center;'>Simulador interactivo para aprender Cálculo</p>",
+    "<h1 style='text-align:center;'>📘 Simulador Visual Para el Aprendizaje de Funciones</h1>"
+    "<p style='text-align:center;'>Simulador interactivo para aprender Deerivadas y Integrales</p>",
     unsafe_allow_html=True
 )
 
@@ -109,10 +109,6 @@ with st.sidebar:
         value="5x + x^2 + 3",
         help="Ejemplos: x^2, sin(x), 2(x+1), ln(x), sqrt(x)"
     )
-
-    xmin = st.number_input("x mínimo", -20.0, 0.0, -6.0)
-    xmax = st.number_input("x máximo", 0.0, 20.0, 6.0)
-    resolution = st.slider("Resolución", 300, 3000, 1200)
 
     st.markdown("---")
     show_f = st.checkbox("Mostrar f(x)", True)
