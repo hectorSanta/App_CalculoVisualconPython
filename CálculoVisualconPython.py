@@ -110,8 +110,21 @@ with st.sidebar:
         help="Ejemplos: x^2, sin(x), 2(x+1), ln(x), sqrt(x)"
     )
 
-    xmin = st.number_input("x mínimo", -20.0, 0.0, -6.0)
-    xmax = st.number_input("x máximo", 0.0, 20.0, 6.0)
+    xmin = st.number_input(
+        "x mínimo",
+        min_value=-35.0,
+        max_value=0.0,
+        value=-10.0,
+        step=0.5
+    )
+
+    xmax = st.number_input(
+        "x máximo",
+        min_value=0.0,
+        max_value=35.0,
+        value=10.0,
+        step=0.5
+    )
 
     st.markdown("---")
     show_f = st.checkbox("Mostrar f(x)", True)
@@ -159,6 +172,18 @@ fig = go.Figure()
 if show_f:
     fig.add_trace(go.Scatter(x=xs, y=ys, name="f(x)", line=dict(width=3)))
 
+# Área bajo la curva
+if show_area:
+    fig.add_trace(go.Scatter(
+        x=xs,
+        y=ys,
+        fill="tozeroy",
+        name="Área bajo f(x)",
+        line=dict(color="rgba(0,0,0,0)"),
+        fillcolor="rgba(0, 100, 255, 0.2)"
+    ))
+
+
 if show_d and df:
     fig.add_trace(go.Scatter(x=xs, y=df(xs), name="f'(x)", line=dict(color="red", dash="dash")))
 
@@ -188,12 +213,29 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
+# Evaluación en x₀
+fx0 = f(np.array([x0]))[0]
+
+dfx0 = None
+if df:
+    dfx0 = df(np.array([x0]))[0]
+
+Fx0 = None
+if Fi:
+    Fx0 = Fi(np.array([x0]))[0]
+
+
 # =============================
 # EXPRESIONES
 # =============================
 with st.expander("📐 Expresiones matemáticas"):
     st.latex("f(x)=" + sp.latex(f_sym))
+    st.latex(rf"f({x0:.2f}) = {fx0:.2f}")
+
     if d_sym:
         st.latex("f'(x)=" + sp.latex(d_sym))
+        st.latex(rf"f'({x0:.2f}) = {dfx0:.2f}")
+
     if i_sym:
         st.latex(r"\int f(x)\,dx=" + sp.latex(i_sym))
+        st.latex(rf"F({x0:.2f}) = {Fx0:.2f}")
