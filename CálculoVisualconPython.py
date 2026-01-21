@@ -34,7 +34,7 @@ TRANSFORMATIONS = (
     (implicit_multiplication_application, convert_xor)
 )
 
-# Funciones permitidas (lista blanca)
+# Funciones permitidas
 SAFE_FUNCTIONS = {
     "sin": sp.sin,
     "cos": sp.cos,
@@ -106,7 +106,7 @@ with st.sidebar:
 
     raw_input = st.text_input(
         "Ingresa f(x):",
-        value="5x + x^2 + 3",
+        value="x^2 + 5",
         help="Ejemplos: x^2, sin(x), 2(x+1), ln(x), sqrt(x)"
     )
 
@@ -131,6 +131,12 @@ with st.sidebar:
     show_d = st.checkbox("Mostrar derivada", True)
     show_i = st.checkbox("Mostrar integral", False)
     show_area = st.checkbox("Área bajo la curva", False)
+    
+    if show_area:
+        st.subheader("Rango de Integración")
+        a_b = st.slider("Intervalo [a, b]", float(xmin), float(xmax), (0.0, 3.0))
+        a_int, b_int = a_b
+
 
     st.markdown("---")
     x0 = st.slider("Punto x₀", xmin, xmax, (xmin + xmax) / 4)
@@ -174,13 +180,16 @@ if show_f:
 
 # Área bajo la curva
 if show_area:
+    x_fill = np.linspace(a_int, b_int, 400)
+    y_fill = f(x_fill)
     fig.add_trace(go.Scatter(
-        x=xs,
-        y=ys,
-        fill="tozeroy",
-        name="Área bajo f(x)",
-        line=dict(color="rgba(0,0,0,0)"),
-        fillcolor="rgba(0, 100, 255, 0.2)"
+        x=x_fill, y=y_fill,
+        fill='tozeroy',
+        mode='lines',
+        line=dict(width=0),
+        fillcolor='rgba(0, 150, 255, 0.3)',
+        name='Área Definida',
+        hoverinfo='skip'
     ))
 
 
@@ -191,29 +200,31 @@ if show_i and Fi:
     fig.add_trace(go.Scatter(x=xs, y=Fi(xs), name="∫f(x)dx", line=dict(color="green", dash="dot")))
 
 # Punto y tangente
-y0 = f(np.array([x0]))[0]
 if df:
+    y0 = f(np.array([x0]))[0]
     slope = df(np.array([x0]))[0]
-    xt = np.linspace(x0 - 1, x0 + 1, 100)
+    # Dibujar una línea corta de tangente
+    t_range = (xmax - xmin) * 0.1
+    xt = np.linspace(x0 - t_range, x0 + t_range, 100)
     yt = slope * (xt - x0) + y0
-    fig.add_trace(go.Scatter(x=xt, y=yt, name="Tangente", line=dict(color="orange", dash="dot")))
-
-fig.add_trace(go.Scatter(
-    x=[x0], y=[y0],
-    mode="markers",
-    marker=dict(size=10, color="orange"),
-    name="x₀"
-))
+    fig.add_trace(go.Scatter(x=xt, y=yt, name="Tangente", line=dict(color="orange", width=3)))
+    fig.add_trace(go.Scatter(x=[x0], y=[y0], mode="markers", marker=dict(size=12, color="orange"), name="Punto x₀"))
 
 fig.update_layout(
     height=650,
     template="plotly_white",
-    legend=dict(orientation="h")
+    legend=dict(orientation="h"),
+    xaxis=dict(
+        tickmode="linear",
+        dtick=2  # 👈 separación entre números del eje X
+    )
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Evaluación en x₀
+# =============================
+# EVALUACIÓN EN x₀
+# =============================
 fx0 = f(np.array([x0]))[0]
 
 dfx0 = None
@@ -225,17 +236,33 @@ if Fi:
     Fx0 = Fi(np.array([x0]))[0]
 
 
-# =============================
-# EXPRESIONES
-# =============================
 with st.expander("📐 Expresiones matemáticas"):
-    st.latex("f(x)=" + sp.latex(f_sym))
-    st.latex(rf"f({x0:.2f}) = {fx0:.2f}")
+    col_math, col_res = st.columns([1, 1])
 
-    if d_sym:
-        st.latex("f'(x)=" + sp.latex(d_sym))
-        st.latex(rf"f'({x0:.2f}) = {dfx0:.2f}")
+    # -------------------------
+    # COLUMNA 1: Análisis simbólico
+    # -------------------------
+    with col_math:
+        st.latex("f(x) = " + sp.latex(f_sym))
+        st.latex(rf"f({x0:.2f}) = {fx0:.2f}")
 
-    if i_sym:
-        st.latex(r"\int f(x)\,dx=" + sp.latex(i_sym))
-        st.latex(rf"F({x0:.2f}) = {Fx0:.2f}")
+        if d_sym:
+            st.latex("f'(x) = " + sp.latex(d_sym))
+            st.latex(rf"f'({x0:.2f}) = {dfx0:.2f}")
+
+        if i_sym:
+            st.latex(r"\int f(x)\,dx = " + sp.latex(i_sym))
+
+    # -------------------------
+    # COLUMNA 2: Área definida
+    # -------------------------
+    with col_res:
+        if show_area:
+            try:
+                area_val = sp.integrate(f_sym, (X, a_int, b_int))
+                st.latex(
+                    r"\int_{" + f"{a_int:.2f}" + r"}^{" + f"{b_int:.2f}" + r"} f(x)\,dx"
+                )
+                st.metric("Resultado del área", f"{float(area_val):.2f}")
+            except:
+                st.warning("No se pudo calcular la integral exacta.")
